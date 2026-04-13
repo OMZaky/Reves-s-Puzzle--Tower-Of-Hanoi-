@@ -90,6 +90,12 @@ private:
             int     best_k = 1;
 
             for (int k = 1; k <= n - 1; ++k) {
+
+                // Prevent 64-bit overflow. Any split leaving 62+ disks for 3 pegs 
+                // is mathematically terrible anyway, so we just skip testing it.
+                if (n - k >= 62) continue;
+
+                
                 int64_t cost = 2LL * dp_table_[k].moves + (1LL << (n - k)) - 1;
                 if (cost < best) {
                     best   = cost;

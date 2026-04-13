@@ -71,44 +71,58 @@ Where `k` is the **split point** — the number of disks temporarily moved to an
 
 ## 🏗️ Architecture
 
-The project is cleanly separated into three files with a decoupled design:
+The project follows the **Single Responsibility Principle (SRP)** — algorithmic logic is fully decoupled from I/O and rendering:
 
 ```
 Reve's Puzzle/
-├── solver.h            # Frame-Stewart algorithm engine (header-only)
-├── reves_puzzle.cpp    # Benchmark driver with correctness verification
+├── solver.h            # Pure algorithm engine (header-only, zero I/O)
+├── reves_puzzle.cpp    # Benchmark driver with diagnostics & verification
 ├── visualizer.cpp      # Interactive terminal visualizer with timeline controls
 ├── .gitignore
 └── README.md
 ```
 
-### `solver.h` — Algorithm Engine
+### `solver.h` — Pure Algorithm Engine
 
-A **header-only**, self-contained solver class:
+A **header-only, I/O-free** solver class with no dependency on `<iostream>`:
 
 - **DP precomputation** — `O(n²)` time, `O(n)` space to fill the optimal split table
 - **Recursive move generation** — Frame-Stewart for 4-peg phases, classic Hanoi for 3-peg phases
 - **Zero I/O coupling** — outputs a `std::vector<Move>` of `{disk, from_peg, to_peg}` structs
 - **Pre-allocated memory** — `moves_.reserve()` eliminates dynamic allocation during recursion
+- **Overflow guard** — skips testing `k`-splits where `n − k ≥ 62` to prevent `int64_t` overflow in the `2^(n-k)` term
+- **Modern C++17** — `[[nodiscard]]`, `noexcept`, `emplace_back`, `constexpr` static members
 
 ### `reves_puzzle.cpp` — Benchmark & Verifier
 
-A correctness-proving harness that:
+A correctness-proving harness with I/O responsibilities extracted as `static` free functions:
 
-- Displays the full DP table for all `n` values
-- Generates and prints the complete move sequence
-- **Simulates every move** to verify no constraint violations (disk ordering, source/target validity)
-- Asserts the final state has all disks on the destination peg
+- `printDPTable()` — displays the full DP table via `const Solver&` accessors
+- `printMoves()` — prints the generated move sequence with peg labels
+- `verifyMoves()` — **simulates every move** on a local peg state to enforce disk ordering, source/target validity, and terminal state correctness
 
 ### `visualizer.cpp` — Terminal Visualizer
 
-A real-time ASCII animation engine featuring:
+A real-time ASCII animation engine with a **decomposed render pipeline**:
 
-- 🎨 **Color-coded disks** with 12-color palette using ANSI escape sequences
-- ⏯️ **Interactive timeline** — play, pause, step forward, step backward
-- 📊 **Progress bar** with move counter and peg highlighting
-- 🖥️ **Terminal size detection** with automatic resize waiting
-- ⚡ **Async game loop** with 10ms polling and configurable frame delay
+- 🎨 **Pre-cached disk strings** — all `2n` render strings (normal + highlighted) are built once in the constructor, eliminating per-frame `ostringstream` allocation
+- ⏯️ **Interactive timeline** — play, pause, step forward, step backward via `processInput()`, `stepForward()`, `stepBackward()`
+- 📊 **Decomposed rendering** — `render()` delegates to `renderHeader()`, `renderInfoBar()`, `renderTowers()`, `renderBases()`, `renderPegLabels()`
+- 🖥️ **Terminal size detection** — polls console width and waits for resize if too narrow
+- ⚡ **Async game loop** — `runEventLoop()` with 10ms CPU-yield polling and configurable frame delay
+- 🔒 **`constexpr` ANSI codes** — all escape sequences are compile-time constants
+
+---
+
+## 🧩 Design Principles
+
+| Principle | Implementation |
+|---|---|
+| **Single Responsibility** | `Solver` is pure math — all I/O lives in the consumer files |
+| **Const Correctness** | All render methods are `const`-qualified; accessors return `const&` |
+| **Zero-Allocation Rendering** | Disk strings pre-cached; pole/base strings cached in constructor |
+| **Overflow Safety** | DP loop guards against `2^(n-k)` overflow for large `n` values |
+| **Modern C++17** | `[[nodiscard]]`, `constexpr`, `emplace_back`, `noexcept` throughout |
 
 ---
 
