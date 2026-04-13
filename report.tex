@@ -1,0 +1,654 @@
+% ============================================================================
+%  Reve's Puzzle — Project Report
+%  Compile with:  xelatex report.tex
+%  Requires:      XeLaTeX, Calibri font, Consolas font
+% ============================================================================
+\documentclass[12pt, a4paper]{article}
+
+%%% ──── FONTS (XeLaTeX) ─────────────────────────────────────────────────────
+\usepackage{fontspec}
+\setmainfont{Calibri}
+\setmonofont{Consolas}[Scale=0.88]
+
+%%% ──── SPACING & PARAGRAPHS ────────────────────────────────────────────────
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{parskip}
+\setlength{\parskip}{12pt plus 2pt minus 1pt}
+\setlength{\parindent}{0pt}
+
+%%% ──── PAGE GEOMETRY ────────────────────────────────────────────────────────
+\usepackage[margin=2.5cm]{geometry}
+
+%%% ──── MATHEMATICS ──────────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}[theorem]{Corollary}
+
+%%% ──── TABLES ───────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+
+%%% ──── CODE LISTINGS ────────────────────────────────────────────────────────
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{codebg}{HTML}{F7F7F7}
+\definecolor{codeframe}{HTML}{CCCCCC}
+\definecolor{kwcolor}{HTML}{0000AA}
+\definecolor{cmtcolor}{HTML}{408040}
+\definecolor{strcolor}{HTML}{AA1111}
+
+\lstdefinestyle{cpp}{
+    language=C++,
+    morekeywords={constexpr, noexcept, int64_t, size_t, nullptr, nodiscard},
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{kwcolor}\bfseries,
+    commentstyle=\color{cmtcolor}\itshape,
+    stringstyle=\color{strcolor},
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    numbers=left,
+    numberstyle=\scriptsize\color{gray},
+    numbersep=8pt,
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    xleftmargin=15pt,
+    xrightmargin=5pt,
+    aboveskip=10pt,
+    belowskip=10pt,
+}
+
+\lstdefinestyle{output}{
+    basicstyle=\small\ttfamily,
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    numbers=none,
+    breaklines=true,
+    showstringspaces=false,
+    aboveskip=10pt,
+    belowskip=10pt,
+    xleftmargin=10pt,
+    xrightmargin=5pt,
+}
+
+\lstset{style=cpp}
+
+%%% ──── ALGORITHMS ──────────────────────────────────────────────────────────
+\usepackage[ruled, vlined, linesnumbered]{algorithm2e}
+\SetAlFnt{\small}
+\SetAlCapFnt{\small\bfseries}
+\SetAlCapNameFnt{\small\bfseries}
+
+%%% ──── MISC ────────────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black,
+}
+
+% ════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ════════════════════════════════════════════════════════════════════════════
+%  COVER PAGE
+% ════════════════════════════════════════════════════════════════════════════
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+
+{\LARGE\bfseries Ain Shams University\\Faculty of Engineering\par}
+\vspace{0.5cm}
+{\large Computer Engineering and Software Systems Program\par}
+
+\vspace{2.5cm}
+
+{\Huge\bfseries Task 3: Reve's Puzzle\par}
+\vspace{0.4cm}
+{\Large 4-Peg Tower of Hanoi — Frame-Stewart Algorithm\par}
+
+\vspace{2.5cm}
+
+{\large CSE245: Design and Analysis of Algorithm — Spring 2026\par}
+
+\vspace{2.5cm}
+
+{\large\bfseries Group Members:\par}
+\vspace{0.5cm}
+{\large
+\begin{tabular}{r@{\hspace{1.5em}}l}
+    1. & [Name — Student ID] \\
+    2. & [Name — Student ID] \\
+    3. & [Name — Student ID] \\
+    4. & [Name — Student ID] \\
+\end{tabular}
+\par}
+
+\vfill
+{\large \today\par}
+\end{titlepage}
+
+% ════════════════════════════════════════════════════════════════════════════
+\tableofcontents
+\newpage
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Underlying Assumptions}
+\label{sec:assumptions}
+
+The implementation makes the following platform and resource assumptions:
+
+\begin{enumerate}[leftmargin=2em]
+
+\item \textbf{Windows-Specific Input Handling.}
+The interactive visualizer (\texttt{visualizer.cpp}) uses the Windows-only headers \texttt{<conio.h>} and \texttt{<windows.h>} for non-blocking keyboard polling (\texttt{\_kbhit()}, \texttt{\_getch()}) and ANSI VT100 terminal processing.
+All platform-dependent code is conditionally compiled under \texttt{\#ifdef \_WIN32}, allowing the algorithmic core (\texttt{solver.h}) and the benchmark (\texttt{reves\_puzzle.cpp}) to remain fully portable.
+
+\item \textbf{ANSI Terminal Support.}
+The visualizer requires a terminal emulator that supports ANSI escape sequences (e.g., Windows Terminal, ConEmu).
+Legacy \texttt{cmd.exe} may not render correctly without the \texttt{ENABLE\_VIRTUAL\_TERMINAL\_PROCESSING} flag, which the program enables programmatically.
+
+\item \textbf{64-Bit Integer Range.}
+The DP table stores move counts in \texttt{int64\_t} ($\text{max} \approx 9.2 \times 10^{18}$).
+An explicit overflow guard skips any split $k$ where $n - k \geq 62$, as the 3-peg term $2^{n-k}$ would exceed the representable range.
+This is discussed in detail in Section~\ref{sec:overflow}.
+
+\item \textbf{Physical Memory.}
+The move sequence vector stores all $\text{FS}(n)$ moves in contiguous memory.
+Each \texttt{Move} struct occupies 12 bytes. For $n = 100$ this requires $\sim 2$~MB, which is negligible.
+For extremely large $n$ (e.g., $n > 500$), the sub-exponential growth $2^{\Theta(\sqrt{n})}$ may exceed available RAM.
+
+\item \textbf{Compiler.}
+The project was developed and tested with GCC 15.2 (MSYS2 UCRT64) targeting C++17.
+
+\end{enumerate}
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Comprehensive Problem Description}
+\label{sec:problem}
+
+\subsection{The Classic Tower of Hanoi}
+
+The Tower of Hanoi is a mathematical puzzle consisting of three pegs and $n$ disks of distinct sizes, initially stacked in decreasing order on the source peg.
+The objective is to transfer all disks to a designated target peg subject to two constraints:
+
+\begin{enumerate}[leftmargin=2em]
+    \item Only one disk may be moved at a time.
+    \item A disk may never be placed on top of a smaller disk.
+\end{enumerate}
+
+The classic 3-peg problem admits an elegant recursive solution requiring exactly $T_3(n) = 2^n - 1$ moves, which is provably optimal~\cite{hinz2013}.
+
+\subsection{Reve's Puzzle: The 4-Peg Generalization}
+
+\textbf{Reve's Puzzle}, introduced by Henry Dudeney in 1907~\cite{dudeney1907}, extends the Tower of Hanoi to \textbf{four pegs}.
+The same two movement constraints apply, but the additional peg creates a richer space of strategies.
+
+In 1941, Frame~\cite{frame1941} and Stewart~\cite{stewart1941} independently proposed an algorithm that conjectures an optimal solution for the 4-peg case.
+This conjecture remained open for over 70 years until Bousch proved it optimal in 2014~\cite{bousch2014}.
+
+\subsection{The Frame-Stewart Insight}
+
+The key observation is that the fourth peg can be used as a \emph{buffer} to temporarily ``park'' the top $k$ disks, freeing the remaining three pegs for a standard 3-peg solve of the bottom $n - k$ disks.
+The optimal value of $k$ balances the cost of the two 4-peg recursive calls against the exponential cost of the 3-peg phase.
+
+This divide-and-conquer strategy yields a move count that grows \emph{sub-exponentially} — a fundamental improvement over the exponential $2^n - 1$ baseline.
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Detailed Solution}
+\label{sec:solution}
+
+\subsection{Dynamic Programming Formulation}
+
+The Frame-Stewart algorithm defines the optimal move count $\text{FS}(n)$ for $n$ disks on 4 pegs via the recurrence:
+
+\begin{equation}
+\label{eq:recurrence}
+\text{FS}(n) = \min_{1 \leq k \leq n-1} \left\{ 2 \cdot \text{FS}(k) + 2^{n-k} - 1 \right\}
+\end{equation}
+
+with base cases $\text{FS}(0) = 0$ and $\text{FS}(1) = 1$.
+
+\textbf{Interpretation.} For each candidate split $k$:
+\begin{itemize}[leftmargin=2em]
+    \item Move the top $k$ disks from the source to an auxiliary peg using all 4 pegs (cost $\text{FS}(k)$).
+    \item Move the remaining $n - k$ disks from source to target using only 3 pegs (cost $2^{n-k} - 1$).
+    \item Move the $k$ parked disks from the auxiliary to the target using all 4 pegs (cost $\text{FS}(k)$).
+\end{itemize}
+
+The minimization over $k$ selects the split that balances these three phases optimally.
+The optimal split for each $n$ is stored alongside the move count in a DP table of size $O(n)$.
+
+\begin{algorithm}[H]
+\KwIn{$N$ — maximum number of disks}
+\KwOut{$\textit{DP}[0 \ldots N]$ — table of optimal moves and split points}
+$\textit{DP}[0] \leftarrow (0,\; 0)$\;
+$\textit{DP}[1] \leftarrow (1,\; 0)$\;
+\For{$n \leftarrow 2$ \KwTo $N$}{
+    $\textit{best} \leftarrow \infty$,\quad $\textit{bestK} \leftarrow 1$\;
+    \For{$k \leftarrow 1$ \KwTo $n - 1$}{
+        \If(\tcp*[f]{overflow guard — see \S\ref{sec:overflow}}){$n - k \geq 62$}{
+            \textbf{continue}\;
+        }
+        $\textit{cost} \leftarrow 2 \cdot \textit{DP}[k].\textit{moves} + 2^{n-k} - 1$\;
+        \If{$\textit{cost} < \textit{best}$}{
+            $\textit{best} \leftarrow \textit{cost}$\;
+            $\textit{bestK} \leftarrow k$\;
+        }
+    }
+    $\textit{DP}[n] \leftarrow (\textit{best},\; \textit{bestK})$\;
+}
+\caption{\textsc{PrecomputeDP}$(N)$}
+\label{alg:dp}
+\end{algorithm}
+
+\subsection{Recursive Move Generation}
+
+Once the DP table is filled, the actual move sequence is generated by two mutually cooperating recursive procedures:
+
+\begin{algorithm}[H]
+\KwIn{$n$ disks, pegs $\textit{src}$, $\textit{tgt}$, $\textit{aux}_1$, $\textit{aux}_2$, disk-numbering $\textit{offset}$}
+\If{$n \leq 0$}{\Return}
+\If{$n = 1$}{
+    \textsc{RecordMove}$(\textit{offset} + 1,\; \textit{src},\; \textit{tgt})$\;
+    \Return\;
+}
+$k \leftarrow \textit{DP}[n].\textit{kSplit}$\;
+\textsc{FrameStewart}$(k,\; \textit{src},\; \textit{aux}_1,\; \textit{aux}_2,\; \textit{tgt},\; \textit{offset})$
+    \tcp*{park top $k$}
+\textsc{Hanoi3}$(n - k,\; \textit{src},\; \textit{tgt},\; \textit{aux}_2,\; \textit{offset} + k)$
+    \tcp*{3-peg solve}
+\textsc{FrameStewart}$(k,\; \textit{aux}_1,\; \textit{tgt},\; \textit{src},\; \textit{aux}_2,\; \textit{offset})$
+    \tcp*{unpark $k$}
+\caption{\textsc{FrameStewart}$(n, \textit{src}, \textit{tgt}, \textit{aux}_1, \textit{aux}_2, \textit{offset})$}
+\label{alg:fs}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\KwIn{$n$ disks, pegs $\textit{src}$, $\textit{tgt}$, $\textit{aux}$, disk-numbering $\textit{offset}$}
+\If{$n \leq 0$}{\Return}
+\textsc{Hanoi3}$(n - 1,\; \textit{src},\; \textit{aux},\; \textit{tgt},\; \textit{offset})$\;
+\textsc{RecordMove}$(\textit{offset} + n,\; \textit{src},\; \textit{tgt})$\;
+\textsc{Hanoi3}$(n - 1,\; \textit{aux},\; \textit{tgt},\; \textit{src},\; \textit{offset})$\;
+\caption{\textsc{Hanoi3}$(n, \textit{src}, \textit{tgt}, \textit{aux}, \textit{offset})$}
+\label{alg:h3}
+\end{algorithm}
+
+The \texttt{offset} parameter is a critical engineering detail: it maps each sub-problem's local disk indices $(1 \ldots n)$ to the global disk numbering in the outer problem.
+This allows the recursive decomposition to produce correct, absolute disk identifiers without auxiliary data structures.
+
+The corresponding C++ implementation in \texttt{solver.h}:
+
+\begin{lstlisting}[style=cpp, caption={Recursive move generation (solver.h)}]
+void frameStewart(int n, int src, int tgt, int aux1, int aux2, int offset) {
+    if (n <= 0) return;
+    if (n == 1) { recordMove(offset + 1, src, tgt); return; }
+
+    int k = dp_table_[n].k_split;
+    frameStewart(k, src, aux1, aux2, tgt, offset);
+    hanoi3(n - k, src, tgt, aux2, offset + k);
+    frameStewart(k, aux1, tgt, src, aux2, offset);
+}
+\end{lstlisting}
+
+\subsection{Critical Implementation Detail: Overflow Protection}
+\label{sec:overflow}
+
+The cost expression in the DP recurrence contains the term $2^{n-k}$, computed as the bit-shift \texttt{1LL << (n - k)}.
+For a signed 64-bit integer (\texttt{int64\_t}), shifting by 63 or more positions is \emph{undefined behavior} per the C++ standard, and shifting by 62 produces $2^{62} \approx 4.6 \times 10^{18}$, which alone approaches \texttt{INT64\_MAX} $\approx 9.2 \times 10^{18}$.
+
+The implementation guards against this with an explicit check:
+
+\begin{lstlisting}[style=cpp, caption={Overflow guard in DP computation (solver.h)}]
+for (int k = 1; k <= n - 1; ++k) {
+    // Prevent 64-bit overflow. Any split leaving 62+ disks for 3 pegs
+    // is mathematically terrible anyway, so we just skip testing it.
+    if (n - k >= 62) continue;
+
+    int64_t cost = 2LL * dp_table_[k].moves + (1LL << (n - k)) - 1;
+    if (cost < best) {
+        best   = cost;
+        best_k = k;
+    }
+}
+\end{lstlisting}
+
+This guard is \textbf{mathematically lossless}: any split with $n - k \geq 62$ incurs a 3-peg cost of $2^{62} - 1 > 4.6 \times 10^{18}$ moves, which is astronomically worse than the optimal split $k^*$ (Section~\ref{sec:alternative}).
+Skipping these candidates therefore has zero impact on the computed optimum.
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Time and Space Complexity Analysis}
+\label{sec:complexity}
+
+\subsection{DP Precomputation (\textsc{PrecomputeDP})}
+
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Time:} The outer loop iterates $n$ from 2 to $N$; for each $n$, the inner loop scans $k$ from 1 to $n - 1$. Total iterations:
+    \[
+        \sum_{n=2}^{N} (n - 1) = \frac{(N-1)(N-2)}{2} = O(N^2)
+    \]
+    Each iteration performs $O(1)$ arithmetic (addition, bit-shift, comparison).
+
+    \item \textbf{Space:} $O(N)$ for the DP table (one \texttt{DPEntry} of 16 bytes per disk count).
+\end{itemize}
+
+\subsection{Move Sequence Generation (\textsc{FrameStewart})}
+
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Time:} Each call to \textsc{RecordMove} executes in amortized $O(1)$ (appending to a pre-reserved vector).
+    Since the algorithm generates exactly $\text{FS}(N)$ moves, the total time is $O(\text{FS}(N))$.
+
+    \item \textbf{Space:}
+    \begin{itemize}
+        \item $O(\text{FS}(N))$ for the move vector (pre-allocated via \texttt{reserve}).
+        \item $O(N)$ for the recursion stack, since each recursive call reduces the sub-problem size by at least 1 disk.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Overall Complexity}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Phase} & \textbf{Time} & \textbf{Space} \\
+\midrule
+DP Precomputation & $O(N^2)$ & $O(N)$ \\
+Move Generation   & $O(\text{FS}(N))$ & $O(\text{FS}(N))$ \\
+\midrule
+\textbf{Total}    & $O(N^2 + \text{FS}(N))$ & $O(\text{FS}(N))$ \\
+\bottomrule
+\end{tabular}
+\caption{Complexity summary of the Frame-Stewart solver.}
+\label{tab:complexity}
+\end{table}
+
+For practical values of $N$ (up to 20 in the visualizer), the $O(N^2)$ preprocessing is negligible. The dominant cost is the $O(\text{FS}(N))$ move generation, where $\text{FS}(N)$ grows sub-exponentially as $\Theta\!\left(\sqrt{N} \cdot 2^{\sqrt{2N}}\right)$ (see Section~\ref{sec:comparative}).
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Comparative Evaluation}
+\label{sec:comparative}
+
+\subsection{Growth Rate Analysis}
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{3-Peg Tower of Hanoi:}
+The optimal solution requires $T_3(n) = 2^n - 1$ moves — pure exponential growth, $\Theta(2^n)$.
+
+\item \textbf{4-Peg Frame-Stewart:}
+The optimal solution grows as $\text{FS}(n) = \Theta\!\left(\sqrt{n} \cdot 2^{\sqrt{2n}}\right)$.
+Since $\sqrt{2n} \ll n$ for large $n$, this is \emph{sub-exponential} — a fundamentally lower complexity class than $2^n$.
+\end{itemize}
+
+\subsection{Empirical Comparison}
+
+Table~\ref{tab:compare} quantifies the savings achieved by the fourth peg.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{r r r r r}
+\toprule
+$n$ & $k^*$ & $\text{FS}(n)$ (4-peg) & $2^n - 1$ (3-peg) & Savings \\
+\midrule
+1   & 0   & 1           & 1             & 0\%     \\
+3   & 1   & 5           & 7             & 29\%    \\
+5   & 2   & 13          & 31            & 58\%    \\
+8   & 4   & 33          & 255           & 87\%    \\
+10  & 6   & 49          & 1,023         & 95\%    \\
+15  & 10  & 129         & 32,767        & 99.6\%  \\
+20  & 14  & 289         & 1,048,575     & 99.97\% \\
+100 & 86  & 172,033     & $\sim 1.27 \times 10^{30}$ & $\approx 100\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Optimal move counts: 4-peg Frame-Stewart vs.\ 3-peg Hanoi.}
+\label{tab:compare}
+\end{table}
+
+The savings demonstrate the \emph{qualitative} superiority of the 4-peg approach: for $n = 20$, the Frame-Stewart algorithm uses 289 moves compared to over one million for 3 pegs — a reduction by a factor of $> 3{,}600$.
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Alternative Approaches \& Efficiency}
+\label{sec:alternative}
+
+While the implemented DP solution is clear and general, the optimal split $k^*$ exhibits a remarkable \emph{closed-form} structure that permits an $O(1)$ time, $O(1)$ space computation. This section presents this superior theoretical alternative.
+
+\subsection{The Triangular Number Observation}
+
+\begin{theorem}[Optimal Split via Triangular Numbers]
+\label{thm:triangular}
+For $n \geq 1$ disks on 4 pegs, the optimal number of disks $p = n - k^*$ solved by the 3-peg phase is:
+\begin{equation}
+\label{eq:p}
+p = \left\lceil \frac{-1 + \sqrt{1 + 8n}}{2} \right\rceil
+\end{equation}
+and the optimal split is $k^* = n - p$.
+\end{theorem}
+
+\textbf{Derivation.}
+The differences $\text{FS}(n) - \text{FS}(n-1)$ follow a structured pattern:
+\[
+\underbrace{2^0}_{1\text{ time}},\quad
+\underbrace{2^1, 2^1}_{2\text{ times}},\quad
+\underbrace{2^2, 2^2, 2^2}_{3\text{ times}},\quad
+\underbrace{2^3, 2^3, 2^3, 2^3}_{4\text{ times}},\quad \ldots
+\]
+The value $2^j$ appears exactly $j + 1$ times, and the cumulative count after completing group $j$ equals the $(j\!+\!1)$-th triangular number $T_{j+1} = \frac{(j+1)(j+2)}{2}$.
+
+For a given $n$, the group index $j$ satisfies $T_j < n \leq T_{j+1}$, which gives $p = j + 1$ as the inverse triangular number ($p$ is the 3-peg disk count), and formula~\eqref{eq:p} follows from solving the quadratic $\frac{p(p+1)}{2} \geq n$.
+
+\begin{corollary}[Closed-Form Optimal Move Count]
+\label{cor:closed}
+The optimal Frame-Stewart move count has the closed form:
+\begin{equation}
+\label{eq:closed}
+\text{FS}(n) = \left(p + r - 2\right) \cdot 2^{p-1} + 1
+\end{equation}
+where $p$ is defined by \eqref{eq:p} and $r = n - \frac{p(p-1)}{2}$.
+\end{corollary}
+
+\textbf{Proof.}
+Summing the difference sequence over the first $n$ terms:
+\[
+    \text{FS}(n)
+    = \sum_{i=0}^{j-1} (i+1) \cdot 2^i \;+\; r \cdot 2^j
+\]
+where $j = p - 1$ and $r = n - T_j$. Applying the identity $\sum_{i=0}^{m}(i+1)\cdot 2^i = m \cdot 2^{m+1} + 1$, we obtain:
+\[
+    \text{FS}(n) = (j-1)\cdot 2^j + 1 + r \cdot 2^j = (j + r - 1)\cdot 2^j + 1 = (p + r - 2)\cdot 2^{p-1} + 1
+\]
+\hfill$\square$
+
+\subsection{Verification Against Known Values}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{r c c c c c}
+\toprule
+$n$ & $p$ & $r$ & Formula & DP & Match \\
+\midrule
+1   & 1  & 1  & $(1+1-2)\cdot 2^0 + 1 = 1$   & 1   & \checkmark \\
+8   & 4  & 2  & $(4+2-2)\cdot 2^3 + 1 = 33$  & 33  & \checkmark \\
+15  & 5  & 5  & $(5+5-2)\cdot 2^4 + 1 = 129$ & 129 & \checkmark \\
+20  & 6  & 5  & $(6+5-2)\cdot 2^5 + 1 = 289$ & 289 & \checkmark \\
+100 & 14 & 9  & $(14+9-2)\cdot 2^{13} + 1 = \text{172,033}$ & 172,033 & \checkmark \\
+\bottomrule
+\end{tabular}
+\caption{Closed-form verification against DP-computed values.}
+\label{tab:verify_closed}
+\end{table}
+
+\subsection{Complexity Comparison}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{l c c}
+\toprule
+\textbf{Approach} & \textbf{Time} & \textbf{Space} \\
+\midrule
+Implemented DP (\S\ref{sec:solution})          & $O(N^2)$ & $O(N)$ \\
+DP with $O(1)$ split                            & $O(N)$   & $O(N)$ \\
+Closed-form (Corollary~\ref{cor:closed})        & $O(1)$   & $O(1)$ \\
+\bottomrule
+\end{tabular}
+\caption{Complexity of computing $\text{FS}(n)$ under different approaches.}
+\label{tab:alt_compare}
+\end{table}
+
+The $O(1)$ closed form is theoretically superior for simply computing $\text{FS}(n)$.
+However, the DP approach was chosen for the implementation because:
+\begin{enumerate}[leftmargin=2em]
+    \item It is \textbf{pedagogically transparent}, directly encoding the recurrence relation.
+    \item It generalizes naturally to $r$-peg variants ($r > 4$), where no known closed form exists.
+    \item The DP table's split array $k^*[n]$ is required by the recursive move generator — even with $O(1)$ split computation, the table must be filled to drive the recursion.
+\end{enumerate}
+
+Note that regardless of how $\text{FS}(n)$ or $k^*$ is computed, the \textbf{move generation} step always costs $O(\text{FS}(n))$ time, since every move must be explicitly produced. Thus, the DP precomputation is never the bottleneck in practice.
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Sample Outputs}
+\label{sec:outputs}
+
+\subsection{Benchmark: $n = 8$ Disks}
+
+Running \texttt{reves\_puzzle.exe} with $n = 8$ produces the following DP table and verification:
+
+\begin{lstlisting}[style=output, caption={DP table output for $n = 8$}]
+=== Frame-Stewart DP Table (n = 0..8) ===
+
++-------+---------+-----------+
+| Disks | Split k |  FS moves |
++-------+---------+-----------+
+|    0  |     0   |         0 |
+|    1  |     0   |         1 |
+|    2  |     1   |         3 |
+|    3  |     1   |         5 |
+|    4  |     1   |         9 |
+|    5  |     2   |        13 |
+|    6  |     3   |        17 |
+|    7  |     3   |        25 |
+|    8  |     4   |        33 |
++-------+---------+-----------+
+\end{lstlisting}
+
+\begin{lstlisting}[style=output, caption={Selected moves and verification for $n = 8$}]
+=== Move Sequence for 8 Disks ===
+
+  Move   1:  Disk 1  A -> C       Move  17:  Disk 8  A -> D
+  Move   2:  Disk 2  A -> B       Move  18:  Disk 5  C -> D
+  Move   3:  Disk 3  A -> D       Move  19:  Disk 6  C -> A
+  Move   4:  Disk 2  B -> D           ...
+  Move   5:  Disk 4  A -> B       Move  33:  Disk 1  A -> D
+      ...
+
+  Total moves: 33  (expected: 33)
+
+  [PASS] n=8 solved in 33 moves (optimal).
+  [PASS] All 8 disks are exclusively on peg D.
+\end{lstlisting}
+
+The solver produces exactly \textbf{33 moves} for 8 disks, matching the DP-computed optimum and the closed-form prediction $(4 + 2 - 2) \cdot 2^3 + 1 = 33$.
+All constraint assertions pass: no illegal disk placements, no source-peg violations, and all disks arrive at the target.
+
+\subsection{Stress Test: $n = 100$ Disks}
+
+To validate the solver under large-scale conditions, we executed a stress test with $n = 100$:
+
+\begin{lstlisting}[style=output, caption={Stress test result for $n = 100$}]
+FS(100) = 172033    expected = 172033
+k* = 86
+\end{lstlisting}
+
+The solver correctly computes $\text{FS}(100) = \mathbf{172{,}033}$ moves with optimal split $k^* = 86$, meaning 86 disks are handled recursively with 4 pegs while the remaining 14 disks are solved via classic 3-peg Hanoi ($2^{14} - 1 = 16{,}383$ moves for that phase alone).
+
+This matches the closed-form prediction:
+\[
+    p = \left\lceil \frac{-1 + \sqrt{801}}{2} \right\rceil = 14, \qquad
+    r = 100 - \frac{13 \cdot 14}{2} = 9, \qquad
+    \text{FS}(100) = (14 + 9 - 2) \cdot 2^{13} + 1 = 172{,}033
+\]
+
+For context, the 3-peg solution for $n = 100$ would require $2^{100} - 1 \approx 1.27 \times 10^{30}$ moves — a number so large that even at one move per nanosecond, it would take $\sim 4 \times 10^{13}$ years. The Frame-Stewart algorithm reduces this to a quantity computable in under one second.
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Summary of Key Findings}
+\label{sec:summary}
+
+\begin{enumerate}[leftmargin=2em]
+
+\item \textbf{Sub-Exponential Performance.}
+The Frame-Stewart algorithm achieves a move count of $\Theta\!\left(\sqrt{n} \cdot 2^{\sqrt{2n}}\right)$, a \emph{fundamentally lower} complexity class than the exponential $2^n - 1$ of the 3-peg solution.
+For $n = 20$, this represents a $> 3{,}600\times$ reduction in move count.
+
+\item \textbf{Proven Optimality.}
+Following Bousch's 2014 proof, the Frame-Stewart conjecture is now a theorem for 4 pegs: the implemented algorithm is provably optimal.
+
+\item \textbf{Closed-Form Alternative.}
+The optimal split $k^*$ and move count $\text{FS}(n)$ admit $O(1)$ closed-form expressions via triangular number analysis, reducing theoretical complexity from $O(n^2)$ to $O(1)$ for the precomputation phase.
+
+\item \textbf{Engineering Robustness.}
+The implementation includes a critical overflow guard for the $2^{n-k}$ computation, preventing undefined behavior for large $n$ without affecting mathematical correctness.
+
+\item \textbf{Architectural Separation.}
+The solver (\texttt{solver.h}) is a pure, I/O-free algorithmic engine.
+All diagnostic output and rendering logic reside in the consumer files, enforcing the Single Responsibility Principle and enabling independent testing of the mathematical core.
+
+\item \textbf{Interactive Verification.}
+The terminal visualizer provides a real-time, step-by-step visual confirmation of the algorithm's correctness, with pre-cached rendering for efficient frame composition.
+
+\end{enumerate}
+
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{References}
+\label{sec:references}
+
+\begin{thebibliography}{9}
+
+\bibitem{frame1941}
+Frame, J.S. (1941).
+``Solution to Problem 3918.''
+\textit{American Mathematical Monthly}, 48(3), 216--217.
+
+\bibitem{stewart1941}
+Stewart, B.M. (1941).
+``Solution to Advanced Problem 3918.''
+\textit{American Mathematical Monthly}, 48(3), 217--219.
+
+\bibitem{bousch2014}
+Bousch, T. (2014).
+``La quatri\`eme tour de Hano\"i.''
+\textit{Bulletin of the Belgian Mathematical Society -- Simon Stevin}, 21(5), 895--912.
+
+\bibitem{dudeney1907}
+Dudeney, H.E. (1907).
+\textit{The Canterbury Puzzles and Other Curious Problems}.
+London: Thomas Nelson \& Sons.
+
+\bibitem{hinz2013}
+Hinz, A.M., Klav\v{z}ar, S., Milutinovi\'c, U., \& Petr, C. (2013).
+\textit{The Tower of Hanoi -- Myths and Maths}.
+Birkh\"auser Basel.
+
+\bibitem{clrs}
+Cormen, T.H., Leiserson, C.E., Rivest, R.L., \& Stein, C. (2022).
+\textit{Introduction to Algorithms}, 4th ed.
+MIT Press.
+
+\end{thebibliography}
+
+\end{document}
